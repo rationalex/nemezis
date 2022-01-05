@@ -1,28 +1,27 @@
 from languages import Language
 import languages
-
+import files
 import moss
 import secret
+import web_navigation
 
 import selenium.common.exceptions
-from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
 
 from dataclasses import dataclass
 
 import glob
 import logging
 import os
+import os.path
+from pathlib import Path
 import re
 import shutil
 
-ejudge_downloads_path = "ejudge_downloads"
 ejudge_url = "https://ejudge.lksh.ru"
 
-
-def run_id_from_submit_name(run):
-    return int(run.lstrip('0'))
+directory_name = "ejudge"
+contest_infos_path = os.path.join(directory_name, "contest_info")
 
 
 def extract_SID(url):
@@ -37,14 +36,14 @@ def extract_run_id(url):
     return int(url[i + 7:])
 
 
-def login_to_ejudge(browser):
+def open_ejudge_login_page_and_login():
     serve_control_url = f"{ejudge_url}/cgi-bin/serve-control"
 
-    browser.get(serve_control_url)
+    web_navigation.browser.get(serve_control_url)
 
-    login = browser.find_element(By.NAME, "login")
-    password = browser.find_element(By.NAME, "password")
-    submit = browser.find_element(By.NAME, "submit")
+    login = web_navigation.browser.find_element(By.NAME, "login")
+    password = web_navigation.browser.find_element(By.NAME, "password")
+    submit = web_navigation.browser.find_element(By.NAME, "submit")
 
     login.send_keys(secret.login)
     password.send_keys(secret.password)
@@ -52,27 +51,95 @@ def login_to_ejudge(browser):
     submit.click()
 
 
-def go_to_judges(browser, contest_id):
-    sid = extract_SID(browser.current_url)
+def go_to_judges(contest_id):
+    sid = extract_SID(web_navigation.browser.current_url)
     contest_judge_url = f"{ejudge_url}/cgi-bin/new-judge?SID={sid}&action=3&contest_id={contest_id}"
-    browser.get(contest_judge_url)
+    web_navigation.browser.get(contest_judge_url)
 
 
-def filter_oks_only_earliest_to_latest(browser, prob_name, not_earlier_than):
-    sid = extract_SID(browser.current_url)
-    judge_url = f"{ejudge_url}/cgi-bin/new-judge?SID={sid}&filter_expr=(status%3D%3DOK+||+status+%3D%3D+PR)+%26%26+latest+%26%26+id+>+{not_earlier_than}+%26%26+prob%3D%3D\"{prob_name}\"&filter_first_run=0&filter_last_run=-1"
-    browser.get(judge_url)
+url_replacements = {
+    ' ': "+",
+    '=': "%3D",
+    '&': "%26",
+}
 
 
-def load_earliest_ok_page(browser):
+@dataclass
+class ProblemInfo:
+    parallel_name: str
+    contest_id: int
+    contest_topic: str
+    problem_name: str
+
+    def __str__(self):
+        return f"{self.parallel_name}-{self.contest_topic}-{self.problem_name}"
+
+    def to_path(self):
+        return f"{self.parallel_name}/{self.contest_topic.replace(' ', '-')}/{self.problem_name}"
+
+
+@dataclass
+class EjudgeSubmit:
+    username: str
+    run_id: int
+    filepath: str
+    language: Language
+
+    @staticmethod
+    def load(path):
+        filename = path.split('/')[-1]
+        username, run_filename = filename.split('_')
+
+        for lang in languages.supported_languages:
+            extension_idx = run_filename.find(languages.file_extension(lang))
+            if extension_idx != -1:
+                run_id = int(run_filename[:extension_idx])
+                submit_lang = lang
+                break
+        else:
+            raise ValueError(f"Language of submit {run_filename} is not supported")
+
+        return EjudgeSubmit(username=username,
+                            run_id=run_id,
+                            language=submit_lang,
+                            filepath=path)
+
+
+def url_safe(s):
+    for bad in url_replacements.keys():
+        s = s.replace(bad, url_replacements[bad])
+    return s
+
+
+def submits_to_check_filter(prob_name, later_than=-1, show_disqualified=True):
+    status_filter = f"(status==OK || status==PR) && latest"
+    if show_disqualified:
+        status_filter = f"({status_filter}) || (status==DQ)"
+
+    prob_filter = f"({status_filter}) && id > {later_than} && prob==\"{prob_name}\""
+    return url_safe(prob_filter)
+
+
+def problem_filter(prob_name):
+    return url_safe(f"prob==\"{prob_name}\"")
+
+
+# should be used only when on judges page
+def apply_filter(filter):
+    sid = extract_SID(web_navigation.browser.current_url)
+    judge_url = f"{ejudge_url}/cgi-bin/new-judge?SID={sid}&filter_expr={filter}&filter_first_run=0&filter_last_run=-1"
+    web_navigation.browser.get(judge_url)
+
+
+def load_earliest_ok_page():
     ok_id_xpath = "/html/body/div[@id='main-cont']/div[@id='container']/table[@class='b1'][1]/tbody/tr[2]/td[@class='b1'][1]"
-    ok_id = int(browser.find_element(By.XPATH, ok_id_xpath).text)
+    ok_id = int(web_navigation.browser.find_element(By.XPATH, ok_id_xpath).text)
 
     username_xpath = "/html/body/div[@id='main-cont']/div[@id='container']/table[@class='b1'][1]/tbody/tr[2]/td[@class='b1'][3]"
-    username = browser.find_element(By.XPATH, username_xpath).text
+    username = web_navigation.browser.find_element(By.XPATH, username_xpath).text
 
     ok_link_xpath = "/html/body/div[@id='main-cont']/div[@id='container']/table[@class='b1'][1]/tbody/tr[2]/td[@class='b1'][8]/a"
-    ok_link = browser.find_element(By.XPATH, ok_link_xpath)
+    ok_link = web_navigation.browser.find_element(By.XPATH, ok_link_xpath)
     ok_link.click()
 
     return ok_id, username
@@ -89,136 +156,125 @@ def parse_language(text_arg):
         raise ValueError(f"Unexpected language: {text_arg}")
 
 
-def load_earliest_ok(browser, contest_id, prob_name, later_than=None):
+# contest_web_navigation.browser should be web_navigation.browser opened on contest judge page
+def load_earliest_ok(problem_info: ProblemInfo, later_than=None, show_disqualified=True):
     if later_than is None:
-        later_than = 0
+        later_than = -1
 
-    login_to_ejudge(browser)
+    open_ejudge_login_page_and_login()
 
-    go_to_judges(browser, contest_id)
+    go_to_judges(problem_info.contest_id)
 
-    filter_oks_only_earliest_to_latest(browser, prob_name, later_than)
+    apply_filter(submits_to_check_filter(prob_name=problem_info.problem_name,
+                                         later_than=later_than,
+                                         show_disqualified=show_disqualified))
 
-    earliest_ok_id, username = load_earliest_ok_page(browser)
+    earliest_ok_id, username = load_earliest_ok_page()
 
     lang_xpath = "/html/body/div[@id='main-cont']/div[@id='container']/div[@id='info-brief']/div[@class='table-scroll']/table[@class='table']/tbody/tr[2]/td[8]/a"
-    lang = parse_language(browser.find_element(By.XPATH, lang_xpath).text)
+    lang = parse_language(web_navigation.browser.find_element(By.XPATH, lang_xpath).text)
 
     download_button_xpath = "/html/body/div[@id='main-cont']/div[@id='container']/div[@id='info-brief']/div[@id='brief-actions']/p/a[2]"
-    download_button = browser.find_element(By.XPATH, download_button_xpath)
+    download_button = web_navigation.browser.find_element(By.XPATH, download_button_xpath)
     download_button.click()
 
     return earliest_ok_id, username, lang
 
 
-def download_all_oks(contest_id, prob_name, later_than=0):
-    try:
-        os.mkdir("ejudge_downloads")
-    except FileExistsError:
-        pass
+def download_all_new_oks(problem_info, later_than=-1, disqualified_too=True):
+    # TODO: don't pass parallel name but get it from contest_id
 
-    options = Options()
-    options.add_experimental_option("prefs", {
-        "download.default_directory": r"/home/rationalex/lksh/plague-check",
-        "download.prompt_for_download": False,
-        "download.directory_upgrade": True,
-        "safebrowsing.enabled": False,
-    })
-    browser = webdriver.Chrome(options=options)
-    params = {'behavior': 'allow', 'downloadPath': r"/home/rationalex/lksh/plague-check"}
-    browser.execute_cdp_cmd('Page.setDownloadBehavior', params)
-
-    topic = contest_topic(contest_id)
+    Path(directory_name).mkdir(parents=True, exist_ok=True)
 
     ok_id = later_than
-    ok_count = 0
+    ok_filepaths = []
     while True:
         try:
-            ok_id, username, lang = load_earliest_ok(browser=browser,
-                                                     contest_id=contest_id,
-                                                     prob_name=prob_name,
-                                                     later_than=ok_id)
+            # TODO: maybe load not earliest but check for missing downloaded oks in case we change some query parameters
+            # e.g. we choose to add DQ'd submits
+            ok_id, username, lang = load_earliest_ok(problem_info=problem_info,
+                                                     later_than=ok_id,
+                                                     show_disqualified=disqualified_too)
 
             ok_filename = f"{str(ok_id).rjust(6, '0')}{languages.file_extension(lang)}"
 
             while not os.path.exists(ok_filename):
                 pass
 
-            logging.info(f"Downloaded {topic}-{prob_name}-{ok_id}")
-            ok_count += 1
+            logging.info(f"Downloaded {problem_info}-{ok_id}")
 
-            shutil.move(ok_filename,
-                        "ejudge_downloads/{}_{}_{}_{}".format(topic.replace(' ', '-'),
-                                                              prob_name,
-                                                              username.replace(' ', '-'),
-                                                              ok_filename))
+            problem_directory = os.path.join(directory_name, problem_info.to_path())
+            Path(problem_directory).mkdir(parents=True, exist_ok=True)
 
+            ok_path = os.path.join(f"{problem_directory}", f"{username.replace(' ', '-')}_{ok_filename}")
+            shutil.move(ok_filename, ok_path)
+
+            ok_filepaths.append(ok_path)
         except selenium.common.exceptions.NoSuchElementException:
             break
         except Exception as e:
             logging.info(e)
             break
 
-    return ok_count
+    return ok_filepaths
 
 
 def contest_topic(contest_id):
-    browser = webdriver.Chrome()
-    login_to_ejudge(browser)
-    go_to_judges(browser, contest_id)
+    # TODO: cache results to files to fasten up a bit
+    open_ejudge_login_page_and_login()
+    go_to_judges(contest_id)
 
     head_xpath = "/html/body/div[@id='main-cont']/div[@id='container']/div[@id='header']/h1"
-    admin_info = re.search("\[(.+?)\]", browser.find_element(By.XPATH, head_xpath).text).group(1)
+    admin_info = re.search("\[(.+?)\]", web_navigation.browser.find_element(By.XPATH, head_xpath).text).group(1)
     contest_name = admin_info.split(',')[2]
 
-    return contest_name.split('.')[-1]
+    return contest_name.split('.')[-1].strip()
 
 
-@dataclass
-class EjudgeSubmit:
-    contest_name: str
-    prob_name: str
-    username: str
-    run_id: int
-    filepath: str
-    language: Language
-
-    @staticmethod
-    def load(path):
-        filename = path.split('/')[-1]
-        contest_name, prob_name, username, run_filename = filename.split('_')
-
-        for lang in languages.supported_languages:
-            extension_idx = run_filename.find(languages.file_extension(lang))
-            if extension_idx != -1:
-                run_id = int(run_filename[:extension_idx])
-                submit_lang = lang
-                break
-        else:
-            raise ValueError(f"Language of submit {run_filename} is not supported")
-
-        return EjudgeSubmit(contest_name=contest_name,
-                            prob_name=prob_name,
-                            username=username,
-                            run_id=run_id,
-                            language=submit_lang,
-                            filepath=path)
+def contest_problems_info_path(contest_id):
+    return os.path.join(contest_infos_path, f"{contest_id}-{contest_topic(contest_id).replace(' ', '_')}.problems")
 
 
-def count_oks_downloaded(contest_id, prob_name, lang_extension):
-    return len(glob.glob(f"ejudge_downloads/{contest_topic(contest_id).replace(' ', '_')}_{prob_name}_*{lang_extension}"))
+def try_load_contest_problem_names(contest_id):
+    info_path = contest_problems_info_path(contest_id)
+    return files.try_read_json_array(info_path)
 
 
-def ejudge_prob_prefix(contest_id, prob_name):
-    return f"{contest_topic(contest_id).replace(' ', '-')}_{prob_name}"
+# we assume that problems have names from A to Z
+def get_contest_problem_names(contest_id):
+    problems = try_load_contest_problem_names(contest_id)
+    if problems is not None:
+        return problems
+
+    problems = []
+    for problem_letter in (chr(c) for c in range(ord('A'), ord('Z') + 1)):
+        open_ejudge_login_page_and_login()
+        go_to_judges(contest_id)
+        apply_filter(problem_filter(problem_letter))
+
+        prob_name_xpath = "/html/body/div[@id='main-cont']/div[@id='container']/table[@class='b1'][1]/tbody/tr[2]/td[@class='b1'][4]"
+        try:
+            prob_name = web_navigation.browser.find_element(By.XPATH, prob_name_xpath).text
+        except:
+            continue
+
+        problems.append(prob_name)
+
+    files.write_json_array(problems, contest_problems_info_path(contest_id))
+    return problems
 
 
-def last_ok_on_disk_run_id(contest_id, prob_name):
-    if not os.path.exists(ejudge_downloads_path):
+def count_oks_downloaded(info: ProblemInfo, lang):
+    return len(
+        glob.glob(f"{directory_name}/{info.to_path()}/*{languages.file_extension(lang)}"))
+
+
+def last_ok_on_disk_run_id(info: ProblemInfo):
+    if not os.path.exists(directory_name):
         return 0
 
     submits = [EjudgeSubmit.load(filename) for filename in
-               glob.glob(f"{ejudge_downloads_path}/{ejudge_prob_prefix(contest_id, prob_name)}_*.*")]
+               glob.glob(f"{directory_name}/{info.to_path()}/*.*")]
     if len(submits) == 0:
         return 0
 
@@ -227,36 +283,37 @@ def last_ok_on_disk_run_id(contest_id, prob_name):
     return submits[0].run_id
 
 
-def oks_on_disk_count(contest_id, prob_name, language: Language):
-    if not os.path.exists(ejudge_downloads_path):
-        return 0
+def analyze_problem(info: ProblemInfo,
+                    similarity_threshold=60,
+                    new_oks_only=True):
 
-    return len(glob.glob(f"{ejudge_downloads_path}/{ejudge_prob_prefix(contest_id, prob_name)}_*{languages.file_extension(language)}"))
+    problem_description = f"{info.parallel_name}-{info.contest_topic}-{info.problem_name}"
 
+    last_ok = last_ok_on_disk_run_id(info)
+    new_ok_filepaths = download_all_new_oks(info,
+                                            later_than=last_ok,
+                                            disqualified_too=True)
 
-def analyze_problem(contest_id, prob_name,
-                    similarity_threshold=60):
-
-    prob_description = f"{contest_topic(contest_id)}-{prob_name}"
-
-    last_ok = last_ok_on_disk_run_id(contest_id, prob_name)
-    oks_downloaded_count = download_all_oks(contest_id, prob_name, last_ok)
-    logging.info(f"Downloaded {oks_downloaded_count} new oks for {prob_description}")
+    logging.info(f"Downloaded {len(new_ok_filepaths)} new oks for {problem_description}")
 
     urls = []
     for lang in languages.supported_languages:
-        prob_oks = oks_downloaded_count \
-                   + oks_on_disk_count(contest_id, prob_name, lang)
+        prob_lang_oks = count_oks_downloaded(info, lang)
 
-        if prob_oks <= 1:
-            logging.info(f"Not enough solutions found for {prob_description}-{lang}: {prob_oks}")
+        if prob_lang_oks <= 1:
+            logging.info(f"Not enough solutions found for {problem_description}-{lang}: {prob_lang_oks}")
+            continue
+
+        if new_oks_only and len(new_ok_filepaths) == 0:
+            logging.info(f"No new solutions found for {problem_description}-{lang}")
             continue
 
         params = moss.MossParameters(). \
-            with_path(f"{ejudge_downloads_path}/{ejudge_prob_prefix(contest_id, prob_name)}_*{languages.file_extension(lang)}"). \
+            with_path(
+            f"{directory_name}/{info.to_path()}/*{languages.file_extension(lang)}"). \
             with_language(lang). \
             with_experimental(). \
-            with_comment(f"{prob_description}-{languages.name(lang)}"). \
+            with_comment(f"{problem_description}-{languages.name(lang)}"). \
             to_cli()
 
         url = moss.evaluate(params)
@@ -264,9 +321,11 @@ def analyze_problem(contest_id, prob_name,
 
         moss.visualize(moss_url=url,
                        similarity_threshold=similarity_threshold,
-                       transformation_regexp=f".+_.+_(.+)_(.+){languages.file_extension(lang)}",
-                       save_to="results")
+                       transformation_regexp=f".+/.+/(.+)/(.+){languages.file_extension(lang)}",
+                       save_to=f"moss/mossum/{info.parallel_name}")
 
-        urls.append(url)
+        urls.append((lang, url))
+
+    # files.delete_all(new_ok_filepaths)
 
     return urls

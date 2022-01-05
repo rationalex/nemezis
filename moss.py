@@ -1,10 +1,12 @@
 import logging
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import time
 import urllib.request
 
+import files
 import languages
 
 
@@ -61,7 +63,11 @@ class MossParameters:
 
 
 def extract_url_from_moss_response(moss_response):
-    return moss_response[moss_response.find("http"):]
+    url_start = moss_response.find("http")
+    if url_start == -1:
+        return ""
+
+    return moss_response[url_start:]
 
 
 def evaluate(params):
@@ -72,6 +78,7 @@ def evaluate(params):
     while True:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
         out, err = proc.communicate()
+        # TODO: add timeout in case server hangs
         proc.wait()
 
         resp = out.decode("utf-8")
@@ -83,6 +90,7 @@ def evaluate(params):
             time.sleep(backoff)
             backoff *= 2
         else:
+            logging.info(f"Moss completed. URL: {moss_url}")
             break
 
     return moss_url
@@ -91,6 +99,8 @@ def evaluate(params):
 def visualize(moss_url, transformation_regexp, similarity_threshold, save_to=None):
     if save_to is None:
         save_to = "."
+
+    files.create_directories_if_not(save_to)
 
     cmd = f"mossum -r -p {similarity_threshold} -t \"{transformation_regexp}\" {moss_url}"
     logging.info(f"{cmd}")
@@ -104,11 +114,15 @@ def visualize(moss_url, transformation_regexp, similarity_threshold, save_to=Non
 
     for file in os.listdir("."):
         if file.endswith(".png") or file.endswith(".txt"):
+            files.create_directories_if_not(save_to)
             shutil.move(file, os.path.join(save_to, file))
 
     return
 
 
-def save_report(moss_url, name):
-    with urllib.request.urlopen(moss_url) as response, open(name, 'wb') as out_file:
+# TODO: download recursively or present in readable format
+def save_report(moss_url, path):
+    Path(os.path.dirname(path)).mkdir(parents=True, exist_ok=True)
+
+    with urllib.request.urlopen(moss_url) as response, open(path, 'wb') as out_file:
         shutil.copyfileobj(response, out_file)
