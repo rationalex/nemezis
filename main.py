@@ -62,7 +62,6 @@ if __name__ == "__main__":
 
                         for lang, moss_url in moss_submits:
                             lang_name = languages.name(lang)
-                            # moss.save_report(moss_url, f"moss/htmls/{parallel_name}-{contest_topic}-{prob}.html")
 
                             print(f"{contest_topic}-{prob_name}-{lang_name}: {moss_url}",
                                   file=fout)
