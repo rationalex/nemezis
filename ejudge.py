@@ -182,15 +182,13 @@ def load_earliest_ok(problem_info: ProblemInfo, later_than=None, show_disqualifi
 
 
 def download_all_new_oks(problem_info, later_than=-1, disqualified_too=True):
-    # TODO: don't pass parallel name but get it from contest_id
-
     Path(directory_name).mkdir(parents=True, exist_ok=True)
 
     ok_id = later_than
     ok_filepaths = []
     while True:
         try:
-            # TODO: maybe load not earliest but check for missing downloaded oks in case we change some query parameters
+            # TODO: instead of loading earliest OK check for missing downloaded oks in case we change some query parameters
             # e.g. we choose to add DQ'd submits
             ok_id, username, lang = load_earliest_ok(problem_info=problem_info,
                                                      later_than=ok_id,
@@ -220,7 +218,7 @@ def download_all_new_oks(problem_info, later_than=-1, disqualified_too=True):
 
 
 def contest_topic(contest_id):
-    # TODO: cache results to files to fasten up a bit
+    # TODO: cache contest_topic results to file to reduce browser calls
     open_ejudge_login_page_and_login()
     go_to_judges(contest_id)
 
