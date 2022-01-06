@@ -16,7 +16,8 @@ def contest_range(first, last):
 # TODO: add e-maxx copypasta
 # TODO: add cli-launch
 # TODO: add moss-registration through cli
-
+# TODO: don't count input reading as plagiarism. Possibly just remove it from source code?
+# TODO: add cli-flag to compare submits from different problems (to check cross-group plagiarism)
 
 if __name__ == "__main__":
     # problems = {
