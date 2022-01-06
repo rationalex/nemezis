@@ -20,7 +20,7 @@ import shutil
 
 ejudge_url = "https://ejudge.lksh.ru"
 
-directory_name = "ejudge"
+directory_name = "ejudge_downloads"
 contest_infos_path = os.path.join(directory_name, "contest_info")
 
 
@@ -318,10 +318,10 @@ def analyze_problem(info: ProblemInfo,
         url = moss.evaluate(params)
         assert url.startswith("http://moss.stanford.edu/results")
 
-        moss.visualize(moss_url=url,
-                       similarity_threshold=similarity_threshold,
-                       transformation_regexp=f".+/.+/(.+)/(.+){languages.file_extension(lang)}",
-                       save_to=f"moss/mossum/{info.parallel_name}")
+        moss.mossum(moss_url=url,
+                    similarity_threshold=similarity_threshold,
+                    transformation_regexp=f".+/.+/(.+)/(.+){languages.file_extension(lang)}",
+                    save_to=f"moss/mossum/{info.parallel_name}/{info.contest_topic}")
 
         urls.append((lang, url))
 

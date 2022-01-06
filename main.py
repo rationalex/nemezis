@@ -19,6 +19,7 @@ def contest_range(first, last):
 # TODO: don't count input reading as plagiarism. Possibly just remove it from source code?
 # TODO: add cli-flag to compare submits from different problems (to check cross-group plagiarism)
 # TODO: ignore disqualified submits that had OK later
+# TODO: support non-A/Z problem names (parse all OK's page or provide through command line options)
 
 if __name__ == "__main__":
     # parallel_contests = {
@@ -38,9 +39,9 @@ if __name__ == "__main__":
         # "2+": [41208],
         # "3+": [41308],
         # "4+": [41408],
-        # "5+": [41509],
-        # "6+": [41609],
-        # "7+": [41709],
+        "5+": [41509],
+        "6+": [41609],
+        "7+": [41709],
         "8+": [41808],
     }
 
@@ -52,7 +53,7 @@ if __name__ == "__main__":
         results_filepath = f"moss/{parallel_name}.moss_results"
         files.create_directories_if_not(results_filepath)
 
-        with open(results_filepath, "a") as fout:
+        with open(results_filepath, "w") as fout:
             for contest_id in parallel_contests[parallel_name]:
                 try:
                     contest_topic = ejudge.contest_topic(contest_id)

@@ -74,7 +74,7 @@ def evaluate(params):
     cmd = f"./moss.pl {params}"
     logging.info(f"{cmd}")
 
-    backoff = 10  # seconds
+    backoff = 30  # seconds
     while True:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
         out, err = proc.communicate()
@@ -96,7 +96,7 @@ def evaluate(params):
     return moss_url
 
 
-def visualize(moss_url, transformation_regexp, similarity_threshold, save_to=None):
+def mossum(moss_url, transformation_regexp, similarity_threshold, save_to=None):
     if save_to is None:
         save_to = "."
 
