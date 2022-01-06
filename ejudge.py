@@ -133,7 +133,8 @@ def apply_filter(filter):
 
 def load_earliest_ok_page():
     ok_id_xpath = "/html/body/div[@id='main-cont']/div[@id='container']/table[@class='b1'][1]/tbody/tr[2]/td[@class='b1'][1]"
-    ok_id = int(web_navigation.browser.find_element(By.XPATH, ok_id_xpath).text)
+    # sometimes admin submissions have prepending # symbols to distinguish them from contestants' solutions
+    ok_id = int(web_navigation.browser.find_element(By.XPATH, ok_id_xpath).text.strip('#'))
 
     username_xpath = "/html/body/div[@id='main-cont']/div[@id='container']/table[@class='b1'][1]/tbody/tr[2]/td[@class='b1'][3]"
     username = web_navigation.browser.find_element(By.XPATH, username_xpath).text

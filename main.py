@@ -21,26 +21,30 @@ def contest_range(first, last):
 # TODO: ignore disqualified submits that had OK later
 
 if __name__ == "__main__":
-    # problems = {
-    #     41301: problem_range('A', 'I'),  # Хеши
-    #     41302: problem_range('A', 'F'),  # ТЧ
-    #     41304: problem_range('D', 'G'),  # Битовые операции
-    #     41305: problem_range('A', 'G'),  # Игры
-    #     # 41306: problem_range('A', 'H'),  # регулярки
-    #     41307: problem_range('A', 'I'),  # СНМ и миностовы
+    # parallel_contests = {
+    #     "1+": contest_range(first=41101, last=41107),
+    #     "2+": contest_range(first=41201, last=41207),
+    #     "3+": contest_range(first=41301, last=41308),
+    #     "4+": contest_range(first=41401, last=41407),
+    #     "5+": contest_range(first=41501, last=41508),
+    #     "6+": contest_range(first=41601, last=41608),
+    #     "7+": contest_range(first=41701, last=41708),
+    #     "8+": contest_range(first=41801, last=41808),
+    #     "9+": contest_range(first=41901, last=41907),
     # }
 
-    parallel_contests = {
-        "1+": contest_range(first=41101, last=41107),
-        "2+": contest_range(first=41201, last=41207),
-        "3+": contest_range(first=41301, last=41308),
-        "4+": contest_range(first=41401, last=41407),
-        "5+": contest_range(first=41501, last=41508),
-        "6+": contest_range(first=41601, last=41608),
-        "7+": contest_range(first=41701, last=41708),
-        "8+": contest_range(first=41801, last=41808),
-        "9+": contest_range(first=41901, last=41907),
+    exam_contests = {
+        # "1+": [41108],
+        # "2+": [41208],
+        # "3+": [41308],
+        # "4+": [41408],
+        # "5+": [41509],
+        # "6+": [41609],
+        # "7+": [41709],
+        "8+": [41808],
     }
+
+    parallel_contests = exam_contests
 
     web_navigation.start_browser()
 
