@@ -13,6 +13,11 @@ def contest_range(first, last):
     return range(first, last + 1)
 
 
+# TODO: add e-maxx copypasta
+# TODO: add cli-launch
+# TODO: add moss-registration through cli
+
+
 if __name__ == "__main__":
     # problems = {
     #     41301: problem_range('A', 'I'),  # Хеши
@@ -35,10 +40,6 @@ if __name__ == "__main__":
         "9+": contest_range(first=41901, last=41907),
     }
 
-    # parallel_contests = {
-    #     "3+": contest_range(first=41301, last=41308),
-    # }
-
     web_navigation.start_browser()
 
     for parallel_name in parallel_contests.keys():
@@ -50,6 +51,7 @@ if __name__ == "__main__":
                 try:
                     contest_topic = ejudge.contest_topic(contest_id)
                     contest_problems = ejudge.get_contest_problem_names(contest_id)
+                    # TODO: provide option to choose which problems to check
                     for prob_name in contest_problems:
                         problem_info = ejudge.ProblemInfo(parallel_name=parallel_name,
                                                           contest_id=contest_id,

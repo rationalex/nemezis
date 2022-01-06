@@ -324,6 +324,4 @@ def analyze_problem(info: ProblemInfo,
 
         urls.append((lang, url))
 
-    # files.delete_all(new_ok_filepaths)
-
     return urls
