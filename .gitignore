@@ -1,5 +1,5 @@
 ejudge_downloads/*
 moss/*
-secret.py
+python_obsolete/secret.py
 moss.pl
 .idea/*
