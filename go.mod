@@ -1,4 +1,4 @@
-module nemezis
+module github.com/rationalex/nemezis
 
 go 1.18
 
